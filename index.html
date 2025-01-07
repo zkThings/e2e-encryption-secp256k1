@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ETH Encryption Demo</title>
+    <script type="module">
+        import * as secp from "https://cdn.jsdelivr.net/npm/@noble/secp256k1@2.2.3/+esm";
+        window.secp256k1 = secp;
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <script type="module">
+        import { ETHEncryption } from './src/encryption/ethEncryption.browser.js';
+        window.ETHEncryption = ETHEncryption;
+    </script>
+</head>
+<body>
+    <div>
+        <h2>Security Test</h2>
+        <button id="testSecurityBtn">Run Security Test</button>
+        <pre id="securityResult"></pre>
+    </div>
+
+    <script type="module">
+        document.getElementById('testSecurityBtn').onclick = async () => {
+            try {
+                const encryption = new ETHEncryption();
+                
+                // Generate two different wallets
+                const wallet1 = ethers.Wallet.createRandom();
+                const wallet2 = ethers.Wallet.createRandom();
+                
+                // Store test results
+                const results = {
+                    wallet1: {
+                        address: wallet1.address,
+                        privateKey: wallet1.privateKey.slice(0, 10) + '...' // truncated for display
+                    },
+                    wallet2: {
+                        address: wallet2.address,
+                        privateKey: wallet2.privateKey.slice(0, 10) + '...' // truncated for display
+                    },
+                    tests: []
+                };
+
+                // Override getPublicKey to use wallet1's public key
+                encryption.getPublicKey = async () => {
+                    return ethers.utils.arrayify(wallet1.publicKey);
+                };
+
+                // Encrypt a test message for wallet1
+                const message = "This is a secret message";
+                const encrypted = await encryption.encryptFor(message, wallet1.address);
+                
+                // Test 1: Correct private key (should work)
+                try {
+                    const decrypted1 = await encryption.decrypt({
+                        publicSignals: encrypted.publicSignals,
+                        privateKey: wallet1.privateKey
+                    });
+                    results.tests.push({
+                        test: "Decrypt with correct key (wallet1)",
+                        result: "SUCCESS ✅",
+                        decrypted: decrypted1
+                    });
+                } catch (error) {
+                    results.tests.push({
+                        test: "Decrypt with correct key (wallet1)",
+                        result: "FAILED ❌",
+                        error: error.message
+                    });
+                }
+
+                // Test 2: Wrong private key (should fail)
+                try {
+                    const decrypted2 = await encryption.decrypt({
+                        publicSignals: encrypted.publicSignals,
+                        privateKey: wallet2.privateKey
+                    });
+                    results.tests.push({
+                        test: "Decrypt with wrong key (wallet2)",
+                        result: "FAILED ❌ (shouldn't work but did)",
+                        decrypted: decrypted2
+                    });
+                } catch (error) {
+                    results.tests.push({
+                        test: "Decrypt with wrong key (wallet2)",
+                        result: "SUCCESS ✅ (failed as expected)",
+                        error: error.message
+                    });
+                }
+
+                // Display results
+                document.getElementById('securityResult').textContent = 
+                    JSON.stringify(results, null, 2);
+            } catch (error) {
+                console.error('Security test error:', error);
+                alert(`Error: ${error.message}`);
+            }
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Encryption Security Demo</title>
+    <script type="module">
+        import * as secp from "https://cdn.jsdelivr.net/npm/@noble/secp256k1@2.2.3/+esm";
+        window.secp256k1 = secp;
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+    <script type="module">
+        import { ETHEncryption } from './src/encryption/ethEncryption.browser.js';
+        window.ETHEncryption = ETHEncryption;
+    </script>
+    <style>
+        .container { max-width: 800px; margin: 20px auto; padding: 20px; }
+        .card { border: 1px solid #ccc; padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .success { color: green; }
+        .error { color: red; }
+        button { margin: 5px; padding: 5px 10px; }
+        pre { background: #f5f5f5; padding: 10px; overflow-x: auto; }
+        .key-display { font-family: monospace; word-break: break-all; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Encryption Security Demo</h1>
+        
+        <div class="card">
+            <h3>1. Generate Test Wallets</h3>
+            <button id="generateBtn">Generate New Wallets</button>
+            <div id="walletsInfo"></div>
+        </div>
+
+        <div class="card">
+            <h3>2. Encrypt Message</h3>
+            <input id="message" type="text" placeholder="Enter message" value="Top secret message" style="width: 100%;">
+            <button id="encryptBtn">Encrypt</button>
+            <pre id="encryptedResult"></pre>
+        </div>
+
+        <div class="card">
+            <h3>3. Test Decryption</h3>
+            <button id="testCorrectBtn">Try Correct Key</button>
+            <button id="testWrongBtn">Try Wrong Key</button>
+            <pre id="decryptResult"></pre>
+        </div>
+
+        <div class="card">
+            <h3>Security Status</h3>
+            <ul id="securityChecks">
+                <li>✅ Using noble-secp256k1 v2.2.3</li>
+                <li>✅ Using Web Crypto API for encryption</li>
+                <li>✅ Using ethers.js v5.7.2 for wallet operations</li>
+            </ul>
+        </div>
+    </div>
+
+    <script type="module">
+        let currentWallets = null;
+        let currentEncrypted = null;
+        const encryption = new ETHEncryption();
+
+        // Generate wallets
+        document.getElementById('generateBtn').onclick = async () => {
+            currentWallets = {
+                wallet1: ethers.Wallet.createRandom(),
+                wallet2: ethers.Wallet.createRandom()
+            };
+
+            document.getElementById('walletsInfo').innerHTML = `
+                <h4>Wallet 1 (Message Recipient)</h4>
+                <div class="key-display">Address: ${currentWallets.wallet1.address}</div>
+                <div class="key-display">Private Key: ${currentWallets.wallet1.privateKey}</div>
+                
+                <h4>Wallet 2 (Wrong Key)</h4>
+                <div class="key-display">Address: ${currentWallets.wallet2.address}</div>
+            `;
+        };
+
+        // Encrypt message
+        document.getElementById('encryptBtn').onclick = async () => {
+            if (!currentWallets) {
+                alert('Generate wallets first!');
+                return;
+            }
+
+            try {
+                const message = document.getElementById('message').value;
+                
+                // Override getPublicKey for demo
+                encryption.getPublicKey = async () => {
+                    return ethers.utils.arrayify(currentWallets.wallet1.publicKey);
+                };
+
+                currentEncrypted = await encryption.encryptFor(
+                    message, 
+                    currentWallets.wallet1.address
+                );
+
+                document.getElementById('encryptedResult').textContent = 
+                    JSON.stringify(currentEncrypted, null, 2);
+            } catch (error) {
+                alert(`Encryption error: ${error.message}`);
+            }
+        };
+
+        // Test decryption with correct key
+        document.getElementById('testCorrectBtn').onclick = async () => {
+            if (!currentEncrypted || !currentWallets) {
+                alert('Encrypt a message first!');
+                return;
+            }
+
+            try {
+                const decrypted = await encryption.decrypt({
+                    publicSignals: currentEncrypted.publicSignals,
+                    privateKey: currentWallets.wallet1.privateKey
+                });
+
+                document.getElementById('decryptResult').innerHTML += 
+                    `\n✅ Correct key worked: "${decrypted}"`;
+            } catch (error) {
+                document.getElementById('decryptResult').innerHTML += 
+                    `\n❌ Correct key failed: ${error.message}`;
+            }
+        };
+
+        // Test decryption with wrong key
+        document.getElementById('testWrongBtn').onclick = async () => {
+            if (!currentEncrypted || !currentWallets) {
+                alert('Encrypt a message first!');
+                return;
+            }
+
+            try {
+                const decrypted = await encryption.decrypt({
+                    publicSignals: currentEncrypted.publicSignals,
+                    privateKey: currentWallets.wallet2.privateKey
+                });
+
+                document.getElementById('decryptResult').innerHTML += 
+                    `\n❌ SECURITY ISSUE: Wrong key worked: "${decrypted}"`;
+            } catch (error) {
+                document.getElementById('decryptResult').innerHTML += 
+                    `\n✅ Good! Wrong key failed as expected`;
+            }
+        };
+    </script>
+</body>
+</html> 

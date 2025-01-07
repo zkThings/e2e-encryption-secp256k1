@@ -1,0 +1,26 @@
+{
+  "name": "@zkthings/private-data-aes256",
+  "version": "0.1.0",
+  "description": "Private data encryption with multiple algorithm support",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "keywords": [
+    "encryption",
+    "aes256",
+    "privacy",
+    "zkthings",
+    "private-data"
+  ],
+  "author": "zkthings",
+  "license": "MIT",
+  "devDependencies": {
+    "jest": "^29.7.0"
+  },
+  "dependencies": {
+    "@noble/secp256k1": "^1.7.1",
+    "ethers": "^6.13.5",
+    "secp256k1": "^5.0.1"
+  }
+}
