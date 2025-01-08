@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Encryption Security Demo</title>
+    <title>Encryption System Tests</title>
     <script type="module">
         import * as secp from "https://cdn.jsdelivr.net/npm/@noble/secp256k1@2.2.3/+esm";
         window.secp256k1 = secp;
@@ -9,142 +9,230 @@
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <script type="module">
         import { ETHEncryption } from './src/encryption/ethEncryption.browser.js';
+        import { ETHWalletEncryption } from './src/encryption/ethWalletEncryption.js';
         window.ETHEncryption = ETHEncryption;
+        window.ETHWalletEncryption = ETHWalletEncryption;
     </script>
     <style>
-        .container { max-width: 800px; margin: 20px auto; padding: 20px; }
-        .card { border: 1px solid #ccc; padding: 15px; margin: 10px 0; border-radius: 5px; }
-        .success { color: green; }
-        .error { color: red; }
-        button { margin: 5px; padding: 5px 10px; }
-        pre { background: #f5f5f5; padding: 10px; overflow-x: auto; }
-        .key-display { font-family: monospace; word-break: break-all; }
+        .container { max-width: 1000px; margin: 20px auto; padding: 20px; }
+        .test-section { 
+            border: 1px solid #ddd; 
+            margin: 10px 0; 
+            padding: 15px;
+            border-radius: 8px;
+        }
+        .success { color: green; font-weight: bold; }
+        .error { color: red; font-weight: bold; }
+        .test-output { 
+            background: #f5f5f5; 
+            padding: 10px; 
+            margin: 10px 0;
+            font-family: monospace;
+        }
+        button { margin: 5px; padding: 8px 16px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Encryption Security Demo</h1>
-        
-        <div class="card">
-            <h3>1. Generate Test Wallets</h3>
-            <button id="generateBtn">Generate New Wallets</button>
-            <div id="walletsInfo"></div>
+        <h1>Encryption System Tests</h1>
+
+        <div class="test-section">
+            <h2>Test 1: Basic Encryption/Decryption</h2>
+            <button onclick="runBasicTest()">Run Basic Test</button>
+            <div id="basicTestOutput" class="test-output"></div>
         </div>
 
-        <div class="card">
-            <h3>2. Encrypt Message</h3>
-            <input id="message" type="text" placeholder="Enter message" value="Top secret message" style="width: 100%;">
-            <button id="encryptBtn">Encrypt</button>
-            <pre id="encryptedResult"></pre>
+        <div class="test-section">
+            <h2>Test 2: MetaMask Integration</h2>
+            <button onclick="runMetaMaskTest()">Run MetaMask Test</button>
+            <div id="metamaskTestOutput" class="test-output"></div>
         </div>
 
-        <div class="card">
-            <h3>3. Test Decryption</h3>
-            <button id="testCorrectBtn">Try Correct Key</button>
-            <button id="testWrongBtn">Try Wrong Key</button>
-            <pre id="decryptResult"></pre>
+        <div class="test-section">
+            <h2>Test 3: Multiple Recipients</h2>
+            <button onclick="runMultiRecipientTest()">Run Multi-Recipient Test</button>
+            <div id="multiTestOutput" class="test-output"></div>
         </div>
 
-        <div class="card">
-            <h3>Security Status</h3>
-            <ul id="securityChecks">
-                <li>✅ Using noble-secp256k1 v2.2.3</li>
-                <li>✅ Using Web Crypto API for encryption</li>
-                <li>✅ Using ethers.js v5.7.2 for wallet operations</li>
-            </ul>
+        <div class="test-section">
+            <h2>Test 4: Security Checks</h2>
+            <button onclick="runSecurityTests()">Run Security Tests</button>
+            <div id="securityTestOutput" class="test-output"></div>
         </div>
     </div>
 
     <script type="module">
-        let currentWallets = null;
-        let currentEncrypted = null;
-        const encryption = new ETHEncryption();
+        // Test utilities
+        function log(id, message, isError = false) {
+            const output = document.getElementById(id);
+            output.innerHTML += `<div class="${isError ? 'error' : 'success'}">${message}</div>`;
+        }
 
-        // Generate wallets
-        document.getElementById('generateBtn').onclick = async () => {
-            currentWallets = {
-                wallet1: ethers.Wallet.createRandom(),
-                wallet2: ethers.Wallet.createRandom()
-            };
-
-            document.getElementById('walletsInfo').innerHTML = `
-                <h4>Wallet 1 (Message Recipient)</h4>
-                <div class="key-display">Address: ${currentWallets.wallet1.address}</div>
-                <div class="key-display">Private Key: ${currentWallets.wallet1.privateKey}</div>
-                
-                <h4>Wallet 2 (Wrong Key)</h4>
-                <div class="key-display">Address: ${currentWallets.wallet2.address}</div>
-            `;
-        };
-
-        // Encrypt message
-        document.getElementById('encryptBtn').onclick = async () => {
-            if (!currentWallets) {
-                alert('Generate wallets first!');
-                return;
-            }
+        // Basic Encryption Test
+        window.runBasicTest = async () => {
+            const output = document.getElementById('basicTestOutput');
+            output.innerHTML = '';
 
             try {
-                const message = document.getElementById('message').value;
-                
-                // Override getPublicKey for demo
-                encryption.getPublicKey = async () => {
-                    return ethers.utils.arrayify(currentWallets.wallet1.publicKey);
-                };
+                // Create test wallets
+                const sender = ethers.Wallet.createRandom();
+                const recipient = ethers.Wallet.createRandom();
+                log('basicTestOutput', `Created test wallets: ${sender.address}, ${recipient.address}`);
 
-                currentEncrypted = await encryption.encryptFor(
-                    message, 
-                    currentWallets.wallet1.address
-                );
+                // Setup encryption
+                const encryption = new ETHEncryption();
+                encryption.getPublicKey = async () => ethers.utils.arrayify(recipient.publicKey);
 
-                document.getElementById('encryptedResult').textContent = 
-                    JSON.stringify(currentEncrypted, null, 2);
-            } catch (error) {
-                alert(`Encryption error: ${error.message}`);
-            }
-        };
+                // Test message
+                const message = "Hello, Encryption World!";
+                log('basicTestOutput', `Original message: ${message}`);
 
-        // Test decryption with correct key
-        document.getElementById('testCorrectBtn').onclick = async () => {
-            if (!currentEncrypted || !currentWallets) {
-                alert('Encrypt a message first!');
-                return;
-            }
+                // Encrypt
+                const encrypted = await encryption.encryptFor(message, recipient.address);
+                log('basicTestOutput', 'Message encrypted successfully');
+                log('basicTestOutput', `Encrypted data: ${JSON.stringify(encrypted.publicSignals, null, 2)}`);
 
-            try {
+                // Decrypt
                 const decrypted = await encryption.decrypt({
-                    publicSignals: currentEncrypted.publicSignals,
-                    privateKey: currentWallets.wallet1.privateKey
+                    publicSignals: encrypted.publicSignals,
+                    privateKey: recipient.privateKey
                 });
+                log('basicTestOutput', `Decrypted message: ${decrypted}`);
 
-                document.getElementById('decryptResult').innerHTML += 
-                    `\n✅ Correct key worked: "${decrypted}"`;
+                // Verify
+                if (decrypted === message) {
+                    log('basicTestOutput', 'TEST PASSED: Encryption/Decryption successful');
+                }
             } catch (error) {
-                document.getElementById('decryptResult').innerHTML += 
-                    `\n❌ Correct key failed: ${error.message}`;
+                log('basicTestOutput', `TEST FAILED: ${error.message}`, true);
             }
         };
 
-        // Test decryption with wrong key
-        document.getElementById('testWrongBtn').onclick = async () => {
-            if (!currentEncrypted || !currentWallets) {
-                alert('Encrypt a message first!');
-                return;
-            }
+        // MetaMask Integration Test
+        window.runMetaMaskTest = async () => {
+            const output = document.getElementById('metamaskTestOutput');
+            output.innerHTML = '';
 
             try {
-                const decrypted = await encryption.decrypt({
-                    publicSignals: currentEncrypted.publicSignals,
-                    privateKey: currentWallets.wallet2.privateKey
-                });
+                if (!window.ethereum) {
+                    throw new Error('MetaMask not detected');
+                }
 
-                document.getElementById('decryptResult').innerHTML += 
-                    `\n❌ SECURITY ISSUE: Wrong key worked: "${decrypted}"`;
+                const walletEncryption = new ETHWalletEncryption(window.ethereum);
+                
+                // Request account access
+                const accounts = await window.ethereum.request({ 
+                    method: 'eth_requestAccounts' 
+                });
+                const userAddress = accounts[0];
+                log('metamaskTestOutput', `Connected to MetaMask: ${userAddress}`);
+
+                // Test message
+                const message = "Test Message 123";
+                log('metamaskTestOutput', `Original message: ${message}`);
+                
+                // Encrypt with signature
+                log('metamaskTestOutput', 'Please sign the encryption message in MetaMask...');
+                const encrypted = await walletEncryption.signAndEncrypt({
+                    data: message,
+                    recipientAddress: userAddress,
+                    signerAddress: userAddress
+                });
+                log('metamaskTestOutput', 'Message encrypted successfully');
+                log('metamaskTestOutput', 'Encrypted data:', encrypted);
+
+                // Decrypt with signature
+                log('metamaskTestOutput', 'Please sign the decryption message in MetaMask...');
+                const decrypted = await walletEncryption.signAndDecrypt({
+                    publicSignals: encrypted.publicSignals,
+                    address: userAddress
+                });
+                log('metamaskTestOutput', `Decrypted message: ${decrypted}`);
+
+                if (decrypted === message) {
+                    log('metamaskTestOutput', 'TEST PASSED: MetaMask encryption/decryption successful');
+                } else {
+                    log('metamaskTestOutput', 'TEST FAILED: Decrypted message does not match original', true);
+                }
             } catch (error) {
-                document.getElementById('decryptResult').innerHTML += 
-                    `\n✅ Good! Wrong key failed as expected`;
+                log('metamaskTestOutput', `TEST FAILED: ${error.message}`, true);
+                console.error('MetaMask test error:', error);
+            }
+        };
+
+        // Multiple Recipients Test
+        window.runMultiRecipientTest = async () => {
+            const output = document.getElementById('multiTestOutput');
+            output.innerHTML = '';
+
+            try {
+                const encryption = new ETHEncryption();
+                const recipients = Array(3).fill(0).map(() => ethers.Wallet.createRandom());
+                log('multiTestOutput', 'Created 3 test recipients');
+
+                const message = "Multi-recipient test message";
+                
+                // Encrypt for each recipient
+                const results = await Promise.all(recipients.map(async (recipient) => {
+                    encryption.getPublicKey = async () => ethers.utils.arrayify(recipient.publicKey);
+                    const encrypted = await encryption.encryptFor(message, recipient.address);
+                    const decrypted = await encryption.decrypt({
+                        publicSignals: encrypted.publicSignals,
+                        privateKey: recipient.privateKey
+                    });
+                    return decrypted === message;
+                }));
+
+                if (results.every(result => result)) {
+                    log('multiTestOutput', 'TEST PASSED: All recipients could decrypt');
+                }
+            } catch (error) {
+                log('multiTestOutput', `TEST FAILED: ${error.message}`, true);
+            }
+        };
+
+        // Security Tests
+        window.runSecurityTests = async () => {
+            const output = document.getElementById('securityTestOutput');
+            output.innerHTML = '';
+
+            try {
+                const encryption = new ETHEncryption();
+                const wallet = ethers.Wallet.createRandom();
+                encryption.getPublicKey = async () => ethers.utils.arrayify(wallet.publicKey);
+
+                // Test 1: Wrong private key
+                try {
+                    const message = "Security test message";
+                    const encrypted = await encryption.encryptFor(message, wallet.address);
+                    const wrongWallet = ethers.Wallet.createRandom();
+                    await encryption.decrypt({
+                        publicSignals: encrypted.publicSignals,
+                        privateKey: wrongWallet.privateKey
+                    });
+                    log('securityTestOutput', 'SECURITY ISSUE: Decryption with wrong key succeeded', true);
+                } catch (error) {
+                    log('securityTestOutput', 'TEST PASSED: Wrong key properly rejected');
+                }
+
+                // Test 2: Tampered data
+                try {
+                    const message = "Tamper test message";
+                    const encrypted = await encryption.encryptFor(message, wallet.address);
+                    encrypted.publicSignals.encryptedData = encrypted.publicSignals.encryptedData.replace('1', '2');
+                    await encryption.decrypt({
+                        publicSignals: encrypted.publicSignals,
+                        privateKey: wallet.privateKey
+                    });
+                    log('securityTestOutput', 'SECURITY ISSUE: Tampered data accepted', true);
+                } catch (error) {
+                    log('securityTestOutput', 'TEST PASSED: Tampered data properly rejected');
+                }
+
+            } catch (error) {
+                log('securityTestOutput', `TEST FAILED: ${error.message}`, true);
             }
         };
     </script>
 </body>
-</html> 
+</html>

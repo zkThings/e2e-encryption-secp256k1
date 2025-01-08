@@ -13,23 +13,38 @@ export class ETHEncryption {
             throw new Error('Invalid recipient address');
         }
 
-        // Generate ephemeral key pair using noble-secp256k1
+        // Generate ephemeral key pair - match Node.js version
         const ephemeralPrivateKey = this.secp.utils.randomPrivateKey();
-        const ephemeralPublicKey = this.secp.getPublicKey(ephemeralPrivateKey);
+        const ephemeralPublicKey = this.secp.getPublicKey(ephemeralPrivateKey, true); // Use compressed
 
         // Get recipient's public key
         const recipientPublicKey = await this.getPublicKey(recipientAddress);
 
-        // Generate shared secret using noble-secp256k1
+        // Generate shared secret - match Node.js ECDH
         const sharedSecret = this.secp.getSharedSecret(
             ephemeralPrivateKey,
             recipientPublicKey
         );
 
-        // Use Web Crypto API instead of Node's crypto
+        // Match Node.js HMAC key derivation
         const encryptionKey = await crypto.subtle.importKey(
             'raw',
-            sharedSecret.slice(0, 32),
+            sharedSecret,
+            { name: 'HMAC', hash: 'SHA-256' },
+            true,
+            ['sign']
+        );
+        
+        const keyMaterial = await crypto.subtle.sign(
+            'HMAC',
+            encryptionKey,
+            new TextEncoder().encode('ENCRYPTION_KEY')
+        );
+
+        // Import as AES key
+        const aesKey = await crypto.subtle.importKey(
+            'raw',
+            keyMaterial.slice(0, 32),
             { name: this.algorithm },
             false,
             ['encrypt']
@@ -38,28 +53,27 @@ export class ETHEncryption {
         const iv = crypto.getRandomValues(new Uint8Array(12));
         const stringData = this._normalizeData(data);
         const encodedData = new TextEncoder().encode(stringData);
-        const associatedData = new TextEncoder().encode(recipientAddress.toLowerCase());
 
         const encrypted = await crypto.subtle.encrypt(
             {
                 name: this.algorithm,
                 iv: iv,
-                additionalData: associatedData
+                additionalData: new TextEncoder().encode(recipientAddress.toLowerCase())
             },
-            encryptionKey,
+            aesKey,
             encodedData
         );
 
-        // Get the last 16 bytes as verification tag (like Node's authTag)
-        const encryptedArray = new Uint8Array(encrypted);
-        const verificationTag = encryptedArray.slice(-16);
-        const encryptedData = encryptedArray.slice(0, -16);
+        // Split encrypted data and auth tag to match Node.js format
+        const encryptedBytes = new Uint8Array(encrypted);
+        const authTag = encryptedBytes.slice(-16);
+        const encryptedData = encryptedBytes.slice(0, -16);
 
         return {
             publicSignals: {
                 encryptedData: this._arrayBufferToHex(encryptedData),
                 initVector: this._arrayBufferToHex(iv),
-                verificationTag: this._arrayBufferToHex(verificationTag),
+                verificationTag: this._arrayBufferToHex(authTag),
                 ephemeralPublicKey: this._arrayBufferToHex(ephemeralPublicKey),
                 forAddress: recipientAddress.toLowerCase(),
                 version: '1.0'
@@ -67,58 +81,79 @@ export class ETHEncryption {
         };
     }
 
-    async decrypt({ publicSignals, privateKey, type = 'user' }) {
-        if (!publicSignals || !privateKey) {
-            throw new Error('Missing required parameters');
-        }
-
-        const signals = type === 'user' ? 
-            publicSignals.user || publicSignals : 
-            publicSignals.notary;
-
-        this._validateSignals(signals);
+    async decrypt({ publicSignals, privateKey }) {
+        console.log('Starting decryption with:', { publicSignals, privateKey });
 
         try {
+            // 1. Validate inputs
+            this._validateSignals(publicSignals);
             const privateKeyBytes = this._validateAndFormatPrivateKey(privateKey);
-            const ephemeralPubKey = this._hexToBytes(signals.ephemeralPublicKey);
+            const ephemeralPubKey = this._hexToBytes(publicSignals.ephemeralPublicKey);
 
-            if (ephemeralPubKey.length !== 33 && ephemeralPubKey.length !== 65) {
-                throw new Error('Invalid ephemeral public key length');
-            }
-
+            // 2. Generate shared secret
             const sharedSecret = this.secp.getSharedSecret(
                 privateKeyBytes,
-                ephemeralPubKey,
-                { recovered: true }
+                ephemeralPubKey
             );
 
-            const decryptionKey = await crypto.subtle.importKey(
+            // 3. Match encryption key derivation
+            const encryptionKey = await crypto.subtle.importKey(
                 'raw',
-                sharedSecret.slice(0, 32),
+                sharedSecret,
+                { name: 'HMAC', hash: 'SHA-256' },
+                true,
+                ['sign']
+            );
+            
+            const keyMaterial = await crypto.subtle.sign(
+                'HMAC',
+                encryptionKey,
+                new TextEncoder().encode('ENCRYPTION_KEY')
+            );
+
+            // 4. Import as AES key
+            const aesKey = await crypto.subtle.importKey(
+                'raw',
+                keyMaterial.slice(0, 32),
                 { name: this.algorithm },
                 false,
                 ['decrypt']
             );
 
-            // Combine encrypted data and verification tag
-            const encryptedData = this._hexToBytes(signals.encryptedData);
-            const verificationTag = this._hexToBytes(signals.verificationTag);
-            const combinedData = new Uint8Array([...encryptedData, ...verificationTag]);
+            // 5. Prepare decryption parameters
+            const iv = this._hexToBytes(publicSignals.initVector);
+            const encryptedData = this._hexToBytes(publicSignals.encryptedData);
+            const authTag = this._hexToBytes(publicSignals.verificationTag);
 
-            const decrypted = await crypto.subtle.decrypt(
+            // 6. Combine data for decryption
+            const encryptedContent = new Uint8Array(encryptedData.length + authTag.length);
+            encryptedContent.set(encryptedData);
+            encryptedContent.set(authTag, encryptedData.length);
+
+            // 7. Decrypt
+            const decrypted = await window.crypto.subtle.decrypt(
                 {
                     name: this.algorithm,
-                    iv: this._hexToBytes(signals.initVector),
-                    additionalData: new TextEncoder().encode(signals.forAddress.toLowerCase())
+                    iv: iv,
+                    additionalData: new TextEncoder().encode(publicSignals.forAddress.toLowerCase())
                 },
-                decryptionKey,
-                combinedData
+                aesKey,
+                encryptedContent
             );
 
-            return this._denormalizeData(new TextDecoder().decode(decrypted));
+            // 8. Process result
+            const decryptedText = new TextDecoder().decode(decrypted);
+            return this._denormalizeData(decryptedText);
+
         } catch (error) {
-            console.error('Detailed error:', error);
-            throw new Error(`Decryption failed: ${error.message}`);
+            console.error('Decryption failed:', {
+                error,
+                name: error.name,
+                message: error.message,
+                stack: error.stack,
+                inputs: { publicSignals, privateKey }
+            });
+            throw new Error(`Decryption failed: ${error.message || error.name}`);
         }
     }
 
@@ -130,6 +165,7 @@ export class ETHEncryption {
     }
 
     _hexToBytes(hex) {
+        if (hex.startsWith('0x')) hex = hex.slice(2);
         const bytes = new Uint8Array(hex.length / 2);
         for (let i = 0; i < hex.length; i += 2) {
             bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
@@ -155,9 +191,31 @@ export class ETHEncryption {
 
     // For testing, return a dummy public key
     async getPublicKey(address) {
-        const privateKey = this.secp.utils.randomPrivateKey();
-        const publicKey = this.secp.getPublicKey(privateKey, true);
-        return publicKey;
+        try {
+            if (!this.testWallet) {
+                // Create and store a test wallet
+                this.testWallet = ethers.Wallet.createRandom();
+                console.log('Created test wallet:', {
+                    address: this.testWallet.address,
+                    privateKey: this.testWallet.privateKey
+                });
+            }
+            
+            // Always use the same test wallet
+            const privateKeyBytes = this._hexToBytes(this.testWallet.privateKey.slice(2));
+            const publicKey = this.secp.getPublicKey(privateKeyBytes, true);
+            
+            console.log('Public key generation:', {
+                requestedAddress: address,
+                usingAddress: this.testWallet.address,
+                publicKey: this._arrayBufferToHex(publicKey)
+            });
+            
+            return publicKey;
+        } catch (error) {
+            console.error('Public key generation error:', error);
+            throw new Error(`Failed to get public key: ${error.message}`);
+        }
     }
 
     // Add Node.js version validation methods
@@ -165,7 +223,6 @@ export class ETHEncryption {
         const requiredFields = [
             'encryptedData',
             'initVector',
-            'verificationTag',
             'ephemeralPublicKey',
             'forAddress'
         ];
@@ -181,13 +238,19 @@ export class ETHEncryption {
         if (typeof privateKey !== 'string' || !privateKey.startsWith('0x')) {
             throw new Error('Invalid private key format');
         }
-
-        const privateKeyBytes = this._hexToBytes(privateKey.slice(2));
-        
-        if (privateKeyBytes.length !== 32) {
-            throw new Error('Invalid private key length');
+        const keyBytes = this._hexToBytes(privateKey.slice(2));
+        if (!this._isValidPrivateKey(keyBytes)) {
+            throw new Error('Invalid private key value');
         }
+        return keyBytes;
+    }
 
-        return privateKeyBytes;
+    // Helper method to check if key is valid
+    _isValidPrivateKey(key) {
+        try {
+            return this.secp.utils.isValidPrivateKey(key);
+        } catch {
+            return false;
+        }
     }
 } 
