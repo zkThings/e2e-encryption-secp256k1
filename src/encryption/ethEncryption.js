@@ -9,9 +9,19 @@ class ETHEncryption extends Encryption {
     this.algorithm = 'aes-256-gcm';
   }
 
-  async encryptFor(data, recipientAddress) {
+  async encryptFor(data, recipientAddress, recipientPublicKey) {
     if (!recipientAddress || !ethers.isAddress(recipientAddress)) {
       throw new Error('Invalid recipient address');
+    }
+
+    // Try registry if public key not provided
+    if (!recipientPublicKey) {
+      recipientPublicKey = await this.getPublicKeyFromRegistry(recipientAddress);
+    }
+
+    // Validate public key
+    if (!recipientPublicKey || !secp256k1.publicKeyVerify(recipientPublicKey)) {
+      throw new Error('Invalid recipient public key');
     }
 
     // Generate ephemeral key pair with verification
@@ -21,12 +31,6 @@ class ETHEncryption extends Encryption {
     } while (!secp256k1.privateKeyVerify(ephemeralPrivateKey));
 
     const ephemeralPublicKey = secp256k1.publicKeyCreate(ephemeralPrivateKey);
-
-    // Get recipient's public key
-    const recipientPublicKey = await this.getPublicKey(recipientAddress);
-    if (!recipientPublicKey || !secp256k1.publicKeyVerify(recipientPublicKey)) {
-      throw new Error('Invalid recipient public key');
-    }
 
     // Generate shared secret using ECDH
     const sharedSecret = secp256k1.ecdh(recipientPublicKey, ephemeralPrivateKey);
@@ -159,9 +163,9 @@ class ETHEncryption extends Encryption {
     return privateKeyBuffer;
   }
 
-  async encryptWithNotary(data, userAddress, notaryAddress) {
-    const userEncryption = await this.encryptFor(data, userAddress);
-    const notaryEncryption = await this.encryptFor(data, notaryAddress);
+  async encryptWithNotary(data, userAddress, userPublicKey, notaryAddress, notaryPublicKey) {
+    const userEncryption = await this.encryptFor(data, userAddress, userPublicKey);
+    const notaryEncryption = await this.encryptFor(data, notaryAddress, notaryPublicKey);
 
     return {
       publicSignals: {
@@ -182,13 +186,9 @@ class ETHEncryption extends Encryption {
     );
   }
 
-  // This would need to be implemented to get public key from address
-  async getPublicKey(address) {
-    // In real implementation, this would:
-    // 1. Look up public key from a registry
-    // 2. Or require it to be passed in
-    // 3. Or recover it from a signature
-    throw new Error('Public key retrieval not implemented');
+  async getPublicKeyFromRegistry(address) {
+    // Placeholder for registry integration
+    throw new Error('Please provide recipient public key or implement registry integration');
   }
 }
 
