@@ -1,0 +1,18 @@
+# Tests
+__tests__/
+coverage/
+*.test.js
+
+# Development files
+.github/
+.gitignore
+.npmrc
+*.log
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Project specific
+.zkthings/ 
