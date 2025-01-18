@@ -1,4 +1,4 @@
-# @zkthings/e2e-encryption-secp256k1
+# E2E Encryption with secp256k1
 
 End-to-end encryption library using secp256k1 - **compatible with EVM key pairs** (Ethereum, Polygon, BSC). Perfect for Web3 apps that need private data.
 
@@ -15,6 +15,14 @@ End-to-end encryption library using secp256k1 - **compatible with EVM key pairs*
 - Data integrity verification built-in
 - Supports notary pattern (dual access encryption)
 
+
+## Installation
+
+```bash
+bun add @zkthings/e2e-encryption-secp256k1
+# or
+npm install @zkthings/e2e-encryption-secp256k1
+```
 
 ## Quick Start
 

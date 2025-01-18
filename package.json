@@ -1,6 +1,6 @@
 {
   "name": "@zkthings/e2e-encryption-secp256k1",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "End-to-end encryption using secp256k1 keys (compatible with EVM wallets)",
   "main": "src/index.js",
   "repository": {
@@ -15,7 +15,12 @@
     "access": "public"
   },
   "scripts": {
-    "test": "jest"
+    "test": "jest",
+    "prepublishOnly": "npm test",
+    "clean": "rm -rf coverage .nyc_output",
+    "license": "node scripts/generate-license.js",
+    "build": "tsc",
+    "lint": "eslint ."
   },
   "keywords": [
     "encryption",
@@ -26,7 +31,7 @@
     "private-data",
     "wallet"
   ],
-  "author": "zkthings",
+  "author": "Saeed Dawod",
   "license": "MIT",
   "devDependencies": {
     "jest": "^29.7.0"
@@ -35,5 +40,8 @@
     "@noble/secp256k1": "^1.7.1",
     "ethers": "^6.13.5",
     "secp256k1": "^5.0.1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
   }
 }
