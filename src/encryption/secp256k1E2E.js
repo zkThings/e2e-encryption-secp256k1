@@ -1,9 +1,9 @@
 const ethers = require('ethers');
 const crypto = require('crypto');
 const secp256k1 = require('secp256k1');
-const Encryption = require('./base');
+const BaseE2E = require('./base');
 
-class ETHEncryption extends Encryption {
+class Secp256k1E2E extends BaseE2E {
   constructor() {
     super();
     this.algorithm = 'aes-256-gcm';
@@ -192,4 +192,4 @@ class ETHEncryption extends Encryption {
   }
 }
 
-module.exports = ETHEncryption; 
+module.exports = Secp256k1E2E; 

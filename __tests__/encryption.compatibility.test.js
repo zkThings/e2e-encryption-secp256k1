@@ -1,5 +1,5 @@
-const ETHEncryption = require('../src/encryption/ethEncryption');
-const BrowserEncryption = require('../src/encryption/ethEncryption.browser');
+const Secp256k1E2E = require('../src/encryption/secp256k1E2E');
+const Secp256k1E2EBrowser = require('../src/encryption/secp256k1E2E.browser');
 const secp256k1 = require('secp256k1');
 const crypto = require('crypto');
 
@@ -10,8 +10,8 @@ describe('Encryption Compatibility Tests', () => {
     let testData;
 
     beforeEach(() => {
-        nodeEncryption = new ETHEncryption();
-        browserEncryption = new BrowserEncryption();
+        nodeEncryption = new Secp256k1E2E();
+        browserEncryption = new Secp256k1E2EBrowser();
 
         // Generate test community keys
         let privateKey = crypto.randomBytes(32);

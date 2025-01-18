@@ -2,7 +2,7 @@ const secp256k1 = require('secp256k1');
 const crypto = require('crypto');
 const ethers = require('ethers');
 
-class ETHEncryption {
+class Secp256k1E2E {
     constructor() {
         this.algorithm = 'aes-256-gcm';
     }
@@ -149,4 +149,4 @@ class ETHEncryption {
     }
 }
 
-module.exports = ETHEncryption; 
+module.exports = Secp256k1E2E; 

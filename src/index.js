@@ -1,8 +1,8 @@
 // Main package entry
-const ETHEncryption = require('./encryption/ethEncryption');
-const ETHEncryptionBrowser = require('./encryption/ethEncryption.browser');
+const Secp256k1E2E = require('./encryption/secp256k1E2E');
+const Secp256k1E2EBrowser = require('./encryption/secp256k1E2E.browser');
 
 module.exports = { 
-    ETHEncryption,        // Standard secure encryption
-    ETHEncryptionBrowser, // Browser-compatible encryption
+    Secp256k1E2E,
+    Secp256k1E2EBrowser
 }; 

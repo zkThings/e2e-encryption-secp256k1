@@ -1,6 +1,6 @@
-class Encryption {
+class BaseE2E {
   constructor() {
-    if (this.constructor === Encryption) {
+    if (this.constructor === BaseE2E) {
       throw new Error("Can't instantiate abstract base class!");
     }
   }
@@ -14,4 +14,4 @@ class Encryption {
   }
 }
 
-module.exports = Encryption; 
+module.exports = BaseE2E; 

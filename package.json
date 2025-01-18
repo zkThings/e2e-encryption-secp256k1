@@ -1,17 +1,19 @@
 {
-  "name": "@zkthings/e2e-encryption",
+  "name": "@zkthings/e2e-encryption-secp256k1",
   "version": "0.1.0",
-  "description": "Private data encryption with multiple algorithm support",
+  "description": "End-to-end encryption using secp256k1 keys (compatible with EVM wallets)",
   "main": "src/index.js",
   "scripts": {
     "test": "jest"
   },
   "keywords": [
     "encryption",
-    "aes256",
+    "secp256k1",
+    "e2e",
     "privacy",
     "zkthings",
-    "private-data"
+    "private-data",
+    "wallet"
   ],
   "author": "zkthings",
   "license": "MIT",

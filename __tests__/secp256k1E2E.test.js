@@ -1,7 +1,7 @@
-const ETHEncryption = require('../src/encryption/ethEncryption');
+const Secp256k1E2E = require('../src/encryption/secp256k1E2E');
 const ethers = require('ethers');
 
-describe('ETHEncryption', () => {
+describe('Secp256k1E2E', () => {
   let encryption;
   let wallet;
   let recipientAddress;
@@ -9,7 +9,7 @@ describe('ETHEncryption', () => {
   let testData;
 
   beforeEach(async () => {
-    encryption = new ETHEncryption();
+    encryption = new Secp256k1E2E();
     wallet = ethers.Wallet.createRandom();
     recipientAddress = wallet.address;
     recipientPublicKey = Buffer.from(wallet.publicKey.slice(2), 'hex');
