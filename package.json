@@ -3,6 +3,17 @@
   "version": "0.1.0",
   "description": "End-to-end encryption using secp256k1 keys (compatible with EVM wallets)",
   "main": "src/index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zkThings/e2e-encryption-secp256k1.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zkThings/e2e-encryption-secp256k1/issues"
+  },
+  "homepage": "https://zksdk.io",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "test": "jest"
   },
