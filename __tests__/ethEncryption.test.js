@@ -5,27 +5,23 @@ describe('ETHEncryption', () => {
   let encryption;
   let wallet;
   let recipientAddress;
+  let recipientPublicKey;
   let testData;
 
   beforeEach(async () => {
     encryption = new ETHEncryption();
     wallet = ethers.Wallet.createRandom();
     recipientAddress = wallet.address;
+    recipientPublicKey = Buffer.from(wallet.publicKey.slice(2), 'hex');
     testData = { secret: 'test123' };
-
-    // Mock getPublicKey for testing
-    encryption.getPublicKey = jest.fn().mockImplementation(async () => {
-      return Buffer.from(wallet.publicKey.slice(2), 'hex');
-    });
   });
 
   describe('Basic Encryption', () => {
     test('should encrypt and decrypt string data correctly', async () => {
       const testString = 'Hello, World!';
       
-      const encrypted = await encryption.encryptFor(testString, recipientAddress);
+      const encrypted = await encryption.encryptFor(testString, recipientAddress, recipientPublicKey);
       
-      // Verify structure
       expect(encrypted).toHaveProperty('publicSignals');
       expect(encrypted.publicSignals).toHaveProperty('encryptedData');
       expect(encrypted.publicSignals).toHaveProperty('initVector');
@@ -41,7 +37,7 @@ describe('ETHEncryption', () => {
     });
 
     test('should encrypt and decrypt object data correctly', async () => {
-      const encrypted = await encryption.encryptFor(testData, recipientAddress);
+      const encrypted = await encryption.encryptFor(testData, recipientAddress, recipientPublicKey);
       const decrypted = await encryption.decrypt({
         publicSignals: encrypted.publicSignals,
         privateKey: wallet.privateKey
@@ -51,7 +47,7 @@ describe('ETHEncryption', () => {
     });
 
     test('should fail with tampered data', async () => {
-      const encrypted = await encryption.encryptFor(testData, recipientAddress);
+      const encrypted = await encryption.encryptFor(testData, recipientAddress, recipientPublicKey);
       
       // Tamper with encrypted data
       encrypted.publicSignals.encryptedData = 
@@ -68,36 +64,20 @@ describe('ETHEncryption', () => {
 
   describe('Notary Encryption', () => {
     let notaryWallet;
-    let originalGetPublicKey;
+    let notaryPublicKey;
 
     beforeEach(() => {
       notaryWallet = ethers.Wallet.createRandom();
-      
-      // Store the original mock implementation
-      originalGetPublicKey = encryption.getPublicKey;
-
-      // Update mock to handle both user and notary addresses
-      encryption.getPublicKey = jest.fn().mockImplementation(async (address) => {
-        if (address.toLowerCase() === recipientAddress.toLowerCase()) {
-          return Buffer.from(wallet.publicKey.slice(2), 'hex');
-        }
-        if (address.toLowerCase() === notaryWallet.address.toLowerCase()) {
-          return Buffer.from(notaryWallet.publicKey.slice(2), 'hex');
-        }
-        throw new Error('Unknown address');
-      });
-    });
-
-    afterEach(() => {
-      // Restore original mock
-      encryption.getPublicKey = originalGetPublicKey;
+      notaryPublicKey = Buffer.from(notaryWallet.publicKey.slice(2), 'hex');
     });
 
     test('should encrypt with notary access', async () => {
       const encrypted = await encryption.encryptWithNotary(
         testData,
         recipientAddress,
-        notaryWallet.address
+        recipientPublicKey,
+        notaryWallet.address,
+        notaryPublicKey
       );
 
       expect(encrypted).toHaveProperty('publicSignals');
@@ -109,7 +89,9 @@ describe('ETHEncryption', () => {
       const encrypted = await encryption.encryptWithNotary(
         testData,
         recipientAddress,
-        notaryWallet.address
+        recipientPublicKey,
+        notaryWallet.address,
+        notaryPublicKey
       );
 
       // User decryption
@@ -134,12 +116,12 @@ describe('ETHEncryption', () => {
   describe('Error Handling', () => {
     test('should reject invalid addresses', async () => {
       await expect(
-        encryption.encryptFor(testData, 'invalid-address')
+        encryption.encryptFor(testData, 'invalid-address', recipientPublicKey)
       ).rejects.toThrow('Invalid recipient address');
     });
 
     test('should reject missing required fields', async () => {
-      const encrypted = await encryption.encryptFor(testData, recipientAddress);
+      const encrypted = await encryption.encryptFor(testData, recipientAddress, recipientPublicKey);
       delete encrypted.publicSignals.verificationTag;
 
       await expect(
@@ -151,7 +133,7 @@ describe('ETHEncryption', () => {
     });
 
     test('should fail with wrong private key', async () => {
-      const encrypted = await encryption.encryptFor(testData, recipientAddress);
+      const encrypted = await encryption.encryptFor(testData, recipientAddress, recipientPublicKey);
       const wrongWallet = ethers.Wallet.createRandom();
 
       await expect(
@@ -167,7 +149,7 @@ describe('ETHEncryption', () => {
     const messages = ['Message 1', 'Message 2', 'Message 3'];
     
     const encrypted = await Promise.all(
-      messages.map(msg => encryption.encryptFor(msg, recipientAddress))
+      messages.map(msg => encryption.encryptFor(msg, recipientAddress, recipientPublicKey))
     );
 
     const decrypted = await encryption.decryptMyMany(
@@ -189,7 +171,7 @@ describe('ETHEncryption', () => {
     ];
 
     for (const testCase of testCases) {
-      const encrypted = await encryption.encryptFor(testCase, recipientAddress);
+      const encrypted = await encryption.encryptFor(testCase, recipientAddress, recipientPublicKey);
       const decrypted = await encryption.decrypt({
         publicSignals: encrypted.publicSignals,
         privateKey: wallet.privateKey

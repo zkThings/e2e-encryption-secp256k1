@@ -1,5 +1,5 @@
 {
-  "name": "@zkthings/private-data-aes256",
+  "name": "@zkthings/e2e-encryption",
   "version": "0.1.0",
   "description": "Private data encryption with multiple algorithm support",
   "main": "src/index.js",

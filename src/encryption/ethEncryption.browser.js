@@ -1,176 +1,83 @@
-// Browser version - using ES modules
-export class ETHEncryption {
+const secp256k1 = require('secp256k1');
+const crypto = require('crypto');
+const ethers = require('ethers');
+
+class ETHEncryption {
     constructor() {
-        if (!window.secp256k1) {
-            throw new Error('Required secp256k1 not found');
-        }
-        this.secp = window.secp256k1;
-        this.algorithm = 'AES-GCM';
+        this.algorithm = 'aes-256-gcm';
     }
 
-    async encryptFor(data, recipientAddress) {
-        if (!recipientAddress || !ethers.utils.isAddress(recipientAddress)) {
-            throw new Error('Invalid recipient address');
-        }
-
-        // Generate ephemeral key pair - match Node.js version
-        const ephemeralPrivateKey = this.secp.utils.randomPrivateKey();
-        const ephemeralPublicKey = this.secp.getPublicKey(ephemeralPrivateKey, true); // Use compressed
-
-        // Get recipient's public key
-        const recipientPublicKey = await this.getPublicKey(recipientAddress);
-
-        // Generate shared secret - match Node.js ECDH
-        const sharedSecret = this.secp.getSharedSecret(
-            ephemeralPrivateKey,
-            recipientPublicKey
-        );
-
-        // Match Node.js HMAC key derivation
-        const encryptionKey = await crypto.subtle.importKey(
-            'raw',
-            sharedSecret,
-            { name: 'HMAC', hash: 'SHA-256' },
-            true,
-            ['sign']
-        );
-        
-        const keyMaterial = await crypto.subtle.sign(
-            'HMAC',
-            encryptionKey,
-            new TextEncoder().encode('ENCRYPTION_KEY')
-        );
-
-        // Import as AES key
-        const aesKey = await crypto.subtle.importKey(
-            'raw',
-            keyMaterial.slice(0, 32),
-            { name: this.algorithm },
-            false,
-            ['encrypt']
-        );
-
-        const iv = crypto.getRandomValues(new Uint8Array(12));
-        const stringData = this._normalizeData(data);
-        const encodedData = new TextEncoder().encode(stringData);
-
-        const encrypted = await crypto.subtle.encrypt(
-            {
-                name: this.algorithm,
-                iv: iv,
-                additionalData: new TextEncoder().encode(recipientAddress.toLowerCase())
-            },
-            aesKey,
-            encodedData
-        );
-
-        // Split encrypted data and auth tag to match Node.js format
-        const encryptedBytes = new Uint8Array(encrypted);
-        const authTag = encryptedBytes.slice(-16);
-        const encryptedData = encryptedBytes.slice(0, -16);
-
-        return {
-            publicSignals: {
-                encryptedData: this._arrayBufferToHex(encryptedData),
-                initVector: this._arrayBufferToHex(iv),
-                verificationTag: this._arrayBufferToHex(authTag),
-                ephemeralPublicKey: this._arrayBufferToHex(ephemeralPublicKey),
-                forAddress: recipientAddress.toLowerCase(),
-                version: '1.0'
-            }
-        };
-    }
-
-    async decrypt({ publicSignals, privateKey }) {
-        console.log('Starting decryption with:', { publicSignals, privateKey });
-
+    async encryptFor(data, recipientAddress, recipientPublicKey) {
         try {
-            // 1. Validate inputs
-            this._validateSignals(publicSignals);
-            const privateKeyBytes = this._validateAndFormatPrivateKey(privateKey);
-            const ephemeralPubKey = this._hexToBytes(publicSignals.ephemeralPublicKey);
+            // Validate address format using ethers
+            recipientAddress = recipientAddress?.toLowerCase();
+            if (!recipientAddress || !ethers.isAddress(recipientAddress)) {
+                throw new Error('Invalid recipient address');
+            }
 
-            // 2. Generate shared secret
-            const sharedSecret = this.secp.getSharedSecret(
-                privateKeyBytes,
-                ephemeralPubKey
+            // Handle public key input - use only Uint8Array
+            let pubKeyUint8;
+            if (recipientPublicKey instanceof Uint8Array) {
+                pubKeyUint8 = recipientPublicKey;
+            } else if (Array.isArray(recipientPublicKey) || ArrayBuffer.isView(recipientPublicKey)) {
+                pubKeyUint8 = new Uint8Array(recipientPublicKey);
+            } else {
+                throw new Error('Invalid public key format');
+            }
+
+            // Validate the public key using secp256k1
+            if (!secp256k1.publicKeyVerify(pubKeyUint8)) {
+                throw new Error('Invalid recipient public key');
+            }
+
+            // Generate ephemeral key pair using crypto.getRandomValues
+            const ephemeralPrivateKey = new Uint8Array(32);
+            crypto.getRandomValues(ephemeralPrivateKey);
+            while (!secp256k1.privateKeyVerify(ephemeralPrivateKey)) {
+                crypto.getRandomValues(ephemeralPrivateKey);
+            }
+
+            const ephemeralPublicKey = secp256k1.publicKeyCreate(new Uint8Array(ephemeralPrivateKey));
+
+            // Generate shared secret using ECDH
+            const sharedSecret = secp256k1.ecdh(
+                pubKeyUint8,
+                new Uint8Array(ephemeralPrivateKey)
             );
 
-            // 3. Match encryption key derivation
-            const encryptionKey = await crypto.subtle.importKey(
-                'raw',
-                sharedSecret,
-                { name: 'HMAC', hash: 'SHA-256' },
-                true,
-                ['sign']
-            );
+            // Generate encryption key using HKDF
+            const encryptionKey = crypto.createHmac('sha256', sharedSecret)
+                .update('ENCRYPTION_KEY')
+                .digest();
+
+            const iv = crypto.randomBytes(12);
+            const cipher = crypto.createCipheriv(this.algorithm, encryptionKey, iv);
             
-            const keyMaterial = await crypto.subtle.sign(
-                'HMAC',
-                encryptionKey,
-                new TextEncoder().encode('ENCRYPTION_KEY')
-            );
+            // Add associated data for authentication
+            const associatedData = Buffer.from(recipientAddress.toLowerCase());
+            cipher.setAAD(associatedData);
+            
+            const stringData = this._normalizeData(data);
+            let encryptedData = cipher.update(stringData, 'utf8', 'hex');
+            encryptedData += cipher.final('hex');
+            
+            const verificationTag = cipher.getAuthTag();
 
-            // 4. Import as AES key
-            const aesKey = await crypto.subtle.importKey(
-                'raw',
-                keyMaterial.slice(0, 32),
-                { name: this.algorithm },
-                false,
-                ['decrypt']
-            );
-
-            // 5. Prepare decryption parameters
-            const iv = this._hexToBytes(publicSignals.initVector);
-            const encryptedData = this._hexToBytes(publicSignals.encryptedData);
-            const authTag = this._hexToBytes(publicSignals.verificationTag);
-
-            // 6. Combine data for decryption
-            const encryptedContent = new Uint8Array(encryptedData.length + authTag.length);
-            encryptedContent.set(encryptedData);
-            encryptedContent.set(authTag, encryptedData.length);
-
-            // 7. Decrypt
-            const decrypted = await window.crypto.subtle.decrypt(
-                {
-                    name: this.algorithm,
-                    iv: iv,
-                    additionalData: new TextEncoder().encode(publicSignals.forAddress.toLowerCase())
-                },
-                aesKey,
-                encryptedContent
-            );
-
-            // 8. Process result
-            const decryptedText = new TextDecoder().decode(decrypted);
-            return this._denormalizeData(decryptedText);
+            // Return direct properties (not nested under publicSignals)
+            return {
+                encryptedData,
+                initVector: iv.toString('hex'),
+                verificationTag: verificationTag.toString('hex'),
+                ephemeralPublicKey: Buffer.from(ephemeralPublicKey).toString('hex'),
+                forAddress: recipientAddress.toLowerCase(),
+                communityId: recipientAddress.toLowerCase(),
+                version: '1.0'
+            };
 
         } catch (error) {
-            console.error('Decryption failed:', {
-                error,
-                name: error.name,
-                message: error.message,
-                stack: error.stack,
-                inputs: { publicSignals, privateKey }
-            });
-            throw new Error(`Decryption failed: ${error.message || error.name}`);
+            console.error('Encryption error:', error);
+            throw error;
         }
-    }
-
-    // Helper methods
-    _arrayBufferToHex(buffer) {
-        return Array.from(new Uint8Array(buffer))
-            .map(b => b.toString(16).padStart(2, '0'))
-            .join('');
-    }
-
-    _hexToBytes(hex) {
-        if (hex.startsWith('0x')) hex = hex.slice(2);
-        const bytes = new Uint8Array(hex.length / 2);
-        for (let i = 0; i < hex.length; i += 2) {
-            bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
-        }
-        return bytes;
     }
 
     _normalizeData(data) {
@@ -179,78 +86,67 @@ export class ETHEncryption {
         return typeof data === 'object' ? JSON.stringify(data) : String(data);
     }
 
-    _denormalizeData(data) {
-        if (data === 'null') return null;
-        if (data === 'undefined') return undefined;
+    async decrypt(encryptedData, privateKey) {
         try {
-            return JSON.parse(data);
-        } catch {
-            return data;
-        }
-    }
+            // Remove '0x' prefix if present
+            privateKey = privateKey.replace('0x', '');
+            
+            // Convert hex private key to Uint8Array
+            const privateKeyBytes = new Uint8Array(
+                privateKey.match(/.{1,2}/g).map(byte => parseInt(byte, 16))
+            );
 
-    // For testing, return a dummy public key
-    async getPublicKey(address) {
-        try {
-            if (!this.testWallet) {
-                // Create and store a test wallet
-                this.testWallet = ethers.Wallet.createRandom();
-                console.log('Created test wallet:', {
-                    address: this.testWallet.address,
-                    privateKey: this.testWallet.privateKey
-                });
+            // Convert hex strings back to buffers
+            const iv = new Uint8Array(
+                encryptedData.initVector.match(/.{1,2}/g).map(byte => parseInt(byte, 16))
+            );
+            
+            const ephemeralPublicKey = new Uint8Array(
+                encryptedData.ephemeralPublicKey.match(/.{1,2}/g).map(byte => parseInt(byte, 16))
+            );
+            
+            const verificationTag = new Uint8Array(
+                encryptedData.verificationTag.match(/.{1,2}/g).map(byte => parseInt(byte, 16))
+            );
+
+            // Generate shared secret using ECDH
+            const sharedSecret = secp256k1.ecdh(
+                ephemeralPublicKey,
+                privateKeyBytes
+            );
+
+            // Generate decryption key using HKDF
+            const decryptionKey = crypto.createHmac('sha256', sharedSecret)
+                .update('ENCRYPTION_KEY')
+                .digest();
+
+            // Create decipher
+            const decipher = crypto.createDecipheriv(this.algorithm, decryptionKey, iv);
+            
+            // Add associated data for authentication
+            const associatedData = Buffer.from(encryptedData.communityId.toLowerCase());
+            decipher.setAAD(associatedData);
+            
+            // Set auth tag
+            decipher.setAuthTag(verificationTag);
+
+            // Decrypt
+            let decrypted = decipher.update(encryptedData.encryptedData, 'hex', 'utf8');
+            decrypted += decipher.final('utf8');
+
+            // Parse the decrypted data
+            try {
+                return JSON.parse(decrypted);
+            } catch {
+                return decrypted === 'undefined' ? undefined :
+                       decrypted === 'null' ? null :
+                       decrypted;
             }
-            
-            // Always use the same test wallet
-            const privateKeyBytes = this._hexToBytes(this.testWallet.privateKey.slice(2));
-            const publicKey = this.secp.getPublicKey(privateKeyBytes, true);
-            
-            console.log('Public key generation:', {
-                requestedAddress: address,
-                usingAddress: this.testWallet.address,
-                publicKey: this._arrayBufferToHex(publicKey)
-            });
-            
-            return publicKey;
         } catch (error) {
-            console.error('Public key generation error:', error);
-            throw new Error(`Failed to get public key: ${error.message}`);
+            console.error('Decryption error:', error);
+            throw error;
         }
     }
+}
 
-    // Add Node.js version validation methods
-    _validateSignals(signals) {
-        const requiredFields = [
-            'encryptedData',
-            'initVector',
-            'ephemeralPublicKey',
-            'forAddress'
-        ];
-
-        for (const field of requiredFields) {
-            if (!signals[field]) {
-                throw new Error(`Missing required field: ${field}`);
-            }
-        }
-    }
-
-    _validateAndFormatPrivateKey(privateKey) {
-        if (typeof privateKey !== 'string' || !privateKey.startsWith('0x')) {
-            throw new Error('Invalid private key format');
-        }
-        const keyBytes = this._hexToBytes(privateKey.slice(2));
-        if (!this._isValidPrivateKey(keyBytes)) {
-            throw new Error('Invalid private key value');
-        }
-        return keyBytes;
-    }
-
-    // Helper method to check if key is valid
-    _isValidPrivateKey(key) {
-        try {
-            return this.secp.utils.isValidPrivateKey(key);
-        } catch {
-            return false;
-        }
-    }
-} 
+module.exports = ETHEncryption; 

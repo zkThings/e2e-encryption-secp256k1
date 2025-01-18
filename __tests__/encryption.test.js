@@ -1,4 +1,4 @@
-const AES256GCM = require('../src');
+const AES256GCM = require('../src/encryption/aes256gcm');
 
 describe('AES256GCM Encryption', () => {
   let encryption;
